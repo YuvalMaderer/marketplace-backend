@@ -1,153 +1,137 @@
-// controllers/productController.js
+const { buildCritiria } = require("../helpers/product.helper");
 const Product = require("../models/product.model");
 
-// Get products count
 async function getProductsCount(req, res) {
-  const name = req.query.name || "";
+  const { query } = req;
+  const critiria = buildCritiria(query);
   try {
-    const count = await Product.countDocuments({
-      name: { $regex: name, $options: "i" }, // "i" for case-insensitive
-    });
-    res.json({ count });
+    const count = await Product.countDocuments(critiria);
+    res.status(200).json({ count });
   } catch (err) {
     console.log(
-      "product.controller, getProductsCount. Error while getting products count",
+      "product.controller, getProductsCount. Error while getting product count",
       err
     );
-    res.status(500).json({ message: err.message });
+    res
+      .status(500)
+      .json({ message: "Server error while getting product count" });
   }
 }
 
-// Get all products
 async function getProducts(req, res) {
-  const name = req.query.name || "";
+  const { query } = req;
+  const critiria = buildCritiria(query);
 
+  let page = query.page || 1;
+  if (page < 1) page = 1;
+
+  const limit = query.limit || 8;
+  const startIndex = (page - 1) * limit || 0;
   try {
-    const products = await Product.find({
-      name: { $regex: name, $options: "i" }, // "i" for case-insensitive
-    });
-    res.json(products);
+    const products = await Product.find(critiria).skip(startIndex).limit(limit);
+    res.status(200).json(products);
   } catch (err) {
     console.log(
-      "product.controller, getProducts. Error while getting products",
+      "product.controller, getProducts. Error while getting product",
       err
     );
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Server error while getting product" });
   }
 }
 
-// Get single product
 async function getProductById(req, res) {
   const { id } = req.params;
   try {
     const product = await Product.findById(id);
-    res.json(product);
+    res.status(200).json(product);
   } catch (err) {
     if (err.name === "CastError") {
       console.log(
-        `product.controller, getProductById. Product not found with id: ${id}`
+        `product.controller, getProductById. CastError! product not found with id: ${id}`
       );
       return res.status(404).json({ message: "Product not found" });
     }
     console.log(
       `product.controller, getProductById. Error while getting product with id: ${id}`,
-      err.name
+      err
     );
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Server error while getting product" });
   }
 }
 
-// Delete product
 async function deleteProduct(req, res) {
   const { id } = req.params;
   try {
     const deletedProduct = await Product.findByIdAndDelete(id);
-
-    if (!deletedProduct) {
-      console.log(
-        `product.controller, deleteProduct. Product not found with id: ${id}`
-      );
-      return res.status(404).json({ message: "Product not found" });
-    }
-
     res.json({ message: "Product deleted" });
   } catch (err) {
-    console.log(
-      `product.controller, deleteProduct. Error while deleting product with id: ${id}`
-    );
-    res.status(500).json({ message: err.message });
+    if (err.name === "CastError") {
+      console.log(
+        `product.controller, deleteProduct. CastError! product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    } else {
+      console.log(
+        `product.controller, deleteProduct. Error while deleting product with id: ${id}`,
+        err
+      );
+      res.status(500).json({ message: "Server error while deleting product" });
+    }
   }
 }
 
-// Create new product
 async function createProduct(req, res) {
-  const productToAdd = req.body;
-  const newProduct = new Product(productToAdd);
-
   try {
+    const newProduct = new Product(req.body);
     const savedProduct = await newProduct.save();
     res.status(201).json(savedProduct);
   } catch (err) {
-    console.log(
-      "product.controller, createProduct. Error while creating product",
-      err
-    );
-
     if (err.name === "ValidationError") {
       // Mongoose validation error
       console.log(`product.controller, createProduct. ${err.message}`);
       res.status(400).json({ message: err.message });
     } else {
       // Other types of errors
-      console.log(`product.controller, createProduct. ${err.message}`);
+      console.log(`product.controller, createProduct. ${err}`);
       res.status(500).json({ message: "Server error while creating product" });
     }
   }
 }
 
-// Update product
 async function updateProduct(req, res) {
   const { id } = req.params;
-  const { name, manufacturer, model, battery } = req.body;
 
   try {
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      { name, manufacturer, model, battery },
-      { new: true, runValidators: true } // validate before updating
-    );
+    const updatedProduct = await Product.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true,
+    });
 
-    if (!updatedProduct) {
-      console.log(
-        `product.controller, updateProduct. Product not found with id: ${id}`
-      );
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    res.json(updatedProduct);
+    res.status(200).json(updatedProduct);
   } catch (err) {
-    console.log(
-      `product.controller, updateProduct. Error while updating product with id: ${id}`,
-      err
-    );
-
-    if (err.name === "ValidationError") {
+    if (err.name === "CastError") {
+      console.log(
+        `product.controller, getProductById. CastError! product not found with id: ${id}`,
+        err
+      );
+      res.status(404).json({ message: "Product not found" });
+    } else if (err.name === "ValidationError") {
       // Mongoose validation error
       console.log(`product.controller, updateProduct. ${err.message}`);
       res.status(400).json({ message: err.message });
     } else {
       // Other types of errors
-      console.log(`product.controller, updateProduct. ${err.message}`);
+      console.log(`product.controller, updateProduct. ${err}`);
       res.status(500).json({ message: "Server error while updating product" });
     }
   }
 }
 
 module.exports = {
-  getProductsCount,
   getProducts,
+  getProductsCount,
   getProductById,
+  deleteProduct,
   createProduct,
   updateProduct,
-  deleteProduct,
 };
