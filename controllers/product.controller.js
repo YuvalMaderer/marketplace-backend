@@ -1,15 +1,23 @@
-const { buildCritiria } = require("../helpers/product.helper");
+const User = require("../models/user.model");
 const Product = require("../models/product.model");
+const { buildCritiria } = require("../helpers/product.helper");
 
+// Get products count
 async function getProductsCount(req, res) {
   const { query } = req;
-  const critiria = buildCritiria(query);
+  const criteria = buildCritiria(query);
+
+  // console.log("page", page);
+  // console.log("limit", limit);
+  // console.log("startIndex", startIndex);
+
   try {
-    const count = await Product.countDocuments(critiria);
+    const count = await Product.countDocuments(criteria);
+
     res.status(200).json({ count });
   } catch (err) {
     console.log(
-      "product.controller, getProductsCount. Error while getting product count",
+      "product.controller, getProductCount. Error while getting product count",
       err
     );
     res
@@ -18,27 +26,28 @@ async function getProductsCount(req, res) {
   }
 }
 
+// Get all products
 async function getProducts(req, res) {
   const { query } = req;
-  const critiria = buildCritiria(query);
+  const criteria = buildCritiria(query);
 
-  let page = query.page || 1;
-  if (page < 1) page = 1;
-
+  const page = query.page || 1;
   const limit = query.limit || 8;
   const startIndex = (page - 1) * limit || 0;
+
   try {
-    const products = await Product.find(critiria).skip(startIndex).limit(limit);
+    const products = await Product.find(criteria).skip(startIndex).limit(limit);
     res.status(200).json(products);
   } catch (err) {
     console.log(
-      "product.controller, getProducts. Error while getting product",
+      "product.controller, getProducts. Error while getting products",
       err
     );
-    res.status(500).json({ message: "Server error while getting product" });
+    res.status(500).json({ message: "Server error while getting products" });
   }
 }
 
+// Get a single product
 async function getProductById(req, res) {
   const { id } = req.params;
   try {
@@ -49,7 +58,7 @@ async function getProductById(req, res) {
       console.log(
         `product.controller, getProductById. CastError! product not found with id: ${id}`
       );
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: "product not found" });
     }
     console.log(
       `product.controller, getProductById. Error while getting product with id: ${id}`,
@@ -59,31 +68,43 @@ async function getProductById(req, res) {
   }
 }
 
+// Delete an product
 async function deleteProduct(req, res) {
   const { id } = req.params;
   try {
     const deletedProduct = await Product.findByIdAndDelete(id);
-    res.json({ message: "Product deleted" });
-  } catch (err) {
-    if (err.name === "CastError") {
+
+    if (!deletedProduct) {
       console.log(
-        `product.controller, deleteProduct. CastError! product not found with id: ${id}`
+        `product.controller, deleteProduct. Product not found with id: ${id}`
       );
       return res.status(404).json({ message: "Product not found" });
-    } else {
-      console.log(
-        `product.controller, deleteProduct. Error while deleting product with id: ${id}`,
-        err
-      );
-      res.status(500).json({ message: "Server error while deleting product" });
     }
+
+    res.json({ message: "Product deleted" });
+  } catch (err) {
+    console.log(
+      `product.controller, deleteProduct. Error while deleting product with id: ${id}`,
+      err
+    );
+    res.status(500).json({ message: "Server error while deleting product" });
   }
 }
 
+// Create a new product
 async function createProduct(req, res) {
   try {
     const newProduct = new Product(req.body);
+    console.log(`1: ${newProduct}`);
+    newProduct.user = req.userId; // Add the user id to the product
+    console.log(`2: ${newProduct}`);
     const savedProduct = await newProduct.save();
+
+    // Update the user's product array
+    await User.findByIdAndUpdate(req.userId, {
+      $push: { products: savedProduct._id }, // Add the product id to the user's products array
+    });
+
     res.status(201).json(savedProduct);
   } catch (err) {
     if (err.name === "ValidationError") {
@@ -92,46 +113,44 @@ async function createProduct(req, res) {
       res.status(400).json({ message: err.message });
     } else {
       // Other types of errors
-      console.log(`product.controller, createProduct. ${err}`);
+      console.log(`product.controller, createProduct. ${err.message}`);
       res.status(500).json({ message: "Server error while creating product" });
     }
   }
 }
 
-async function updateProduct(req, res) {
+// Delete a product
+async function deleteProduct(req, res) {
   const { id } = req.params;
-
   try {
-    const updatedProduct = await Product.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true,
+    const deletedProduct = await Product.findByIdAndDelete(id);
+
+    if (!deletedProduct) {
+      console.log(
+        `product.controller, deleteProduct. Product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Update the user's product array
+    await User.findByIdAndUpdate(req.userId, {
+      $pull: { products: id }, // Remove the product id from the user's products array
     });
 
-    res.status(200).json(updatedProduct);
+    res.json({ message: "Product deleted" });
   } catch (err) {
-    if (err.name === "CastError") {
-      console.log(
-        `product.controller, getProductById. CastError! product not found with id: ${id}`,
-        err
-      );
-      res.status(404).json({ message: "Product not found" });
-    } else if (err.name === "ValidationError") {
-      // Mongoose validation error
-      console.log(`product.controller, updateProduct. ${err.message}`);
-      res.status(400).json({ message: err.message });
-    } else {
-      // Other types of errors
-      console.log(`product.controller, updateProduct. ${err}`);
-      res.status(500).json({ message: "Server error while updating product" });
-    }
+    console.log(
+      `product.controller, deleteProduct. Error while deleting product with id: ${id}`,
+      err
+    );
+    res.status(500).json({ message: "Server error while deleting product" });
   }
 }
 
 module.exports = {
-  getProducts,
   getProductsCount,
+  getProducts,
   getProductById,
-  deleteProduct,
   createProduct,
-  updateProduct,
+  deleteProduct,
 };
