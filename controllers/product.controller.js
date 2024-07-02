@@ -147,10 +147,38 @@ async function deleteProduct(req, res) {
   }
 }
 
+async function getProductsByUser(req, res) {
+  const { id } = req.params;
+  const userProducts = [];
+
+  try {
+    const user = await User.findById(id);
+    const { products, ...userWithoutPassword } = user._doc;
+    for (const product of products) {
+      const currentProduct = await Product.findById(product);
+      userProducts.push(currentProduct);
+    }
+    res.status(200).json([userProducts]);
+  } catch (err) {
+    if (err.name === "CastError") {
+      console.log(
+        `user.controller, getUserById. CastError! user not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "User not found" });
+    }
+    console.log(
+      `user.controller, getUserById. Error while getting user with id: ${id}`,
+      err
+    );
+    res.status(500).json({ message: "Server error while getting user" });
+  }
+}
+
 module.exports = {
   getProductsCount,
   getProducts,
   getProductById,
   createProduct,
   deleteProduct,
+  getProductsByUser,
 };

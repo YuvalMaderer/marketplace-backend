@@ -8,6 +8,7 @@ const {
   createProduct,
   // updateProduct,
   deleteProduct,
+  getProductsByUser,
 } = require("../controllers/product.controller");
 const {
   verifyToken,
@@ -20,5 +21,6 @@ router.get("/:id", getProductById);
 router.post("/", verifyToken, createProduct);
 // router.put("/:id", updateProduct);
 router.delete("/:id", verifyToken, authorizeProductOwner, deleteProduct);
+router.get("/user-product/:id", verifyToken, getProductsByUser);
 
 module.exports = router;
